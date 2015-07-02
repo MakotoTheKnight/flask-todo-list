@@ -30,6 +30,7 @@ def create_list(args):
     return response
 
 
+@app.route('/lists/<name>')
 @app.route('/lists/<name>/entries')
 def entries_for_list(name):
     entries = db.list_entries(name)
@@ -47,7 +48,7 @@ def create_list_entry(list_name, text):
     return response
 
 
-def convert_to_bool(arg):
+def __convert_to_bool(arg):
     return arg.lower() in ('1', 'true')
 
 
@@ -55,17 +56,20 @@ def convert_to_bool(arg):
 def update_list_entry(name, entry_id):
     data = {k: v for k, v in
             parser.parse({'text': Arg(str),
-                          'completed': Arg(bool, use=convert_to_bool)},
-                         request, locations=('form',)).iteritems() if v}
-    updated = db.update_entry(name, entry_id, data)
-    response = Response()
-    response.status_code = 200 if updated else 404
+                          'completed': Arg(bool, use=__convert_to_bool)},
+                         request, locations=('form',)).iteritems() if v is not None}
+    updated_entity = db.update_entry(name, entry_id, data)
+    response = jsonify(updated_entity)
+    response.status_code = 200 if updated_entity else 404
     return response
 
 
-@app.route('/lists/<name>', methods=['DELETE'])
-def delete_list(name):
-    pass
+@app.route('/lists/<name>/entries/<entry_id>', methods=['DELETE'])
+def delete_entry(name, entry_id):
+    deleted = db.delete_entry(name, entry_id)
+    response = Response()
+    response.status_code = 204 if deleted else 404
+    return response
 
 
 if __name__ == '__main__':

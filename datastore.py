@@ -10,6 +10,7 @@ class Database:
 
     def create_list(self, list_name):
         try:
+            self.cursor.execute('PRAGMA foreign_keys = ON')
             r = self.cursor.execute('INSERT INTO list (name) VALUES (?)', (list_name,))
             self.connection.commit()
             return r
@@ -21,7 +22,8 @@ class Database:
             return False
         try:
             list_id = self.__find_id_of_list(list_name)
-            r = self.cursor.execute('INSERT INTO entry (text, list_id) values (?, ?)', (text, list_id))
+            self.cursor.execute('PRAGMA foreign_keys = ON')
+            r = self.cursor.execute('INSERT INTO entry (text, list_id) VALUES (?, ?)', (text, list_id))
             self.connection.commit()
             return r
         except IntegrityError as e:
@@ -29,7 +31,9 @@ class Database:
 
     def update_entry(self, list_name, entry_id, data):
         try:
+            has_updated = False
             list_id = self.__find_id_of_list(list_name)
+            self.cursor.execute('PRAGMA foreign_keys = ON')
             e = self.cursor.execute('SELECT * FROM entry WHERE id = (?)', (entry_id,)).fetchone()
             if not e:
                 return False  # no entries
@@ -40,16 +44,26 @@ class Database:
                 return False  # Updating the wrong thing
             else:
                 entry.update(data)
-                # for key, value in data.iteritems():
-                #     self.cursor.execute('UPDATE entry SET ? = ?', (key, value))
-                # self.connection.commit()
-                return entry
+                for key, value in data.iteritems():
+                    self.cursor.execute('PRAGMA foreign_keys = ON')
+                    self.cursor.execute('UPDATE entry SET {} = ? WHERE id = (?)'.format(key), (value, entry_id))
+                    has_updated = True
+                self.connection.commit()
+                return entry if has_updated else {}
         except Exception as e:
             print e.message
             return False
 
-    def delete(self, entry):
-        pass
+    def delete_entry(self, list_name, entry_id):
+        try:
+            list_id = self.__find_id_of_list(list_name)
+            self.cursor.execute('PRAGMA foreign_keys = ON')
+            self.cursor.execute('DELETE FROM entry WHERE id = (?) AND list_id = (?)', (entry_id, list_id))
+            self.connection.commit()
+            return True
+        except Exception as e:
+            print e.message
+            return False
 
     def list_all(self):
         l = self.cursor.execute('SELECT * FROM list').fetchall()
@@ -64,6 +78,7 @@ class Database:
         return container
 
     def list_entries(self, list_name):
+        self.cursor.execute('PRAGMA foreign_keys = ON')
         l = self.cursor.execute(
             'SELECT e.* FROM list l ' +
             'LEFT JOIN entry e ON e.list_id = l.id WHERE l.name = (?)',
@@ -73,10 +88,12 @@ class Database:
         container['entries'] = []
         for row in l:
             r = dict(zip(('id', 'text', 'completed'), row))
+            r['completed'] = bool(r['completed'])
             container['entries'].append(r)
 
         return container
 
     def __find_id_of_list(self, list_name):
+        self.cursor.execute('PRAGMA foreign_keys = ON')
         r = self.cursor.execute('SELECT id FROM list WHERE name = (?)', (list_name,))
         return r.fetchone()[0]
